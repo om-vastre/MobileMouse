@@ -1,12 +1,14 @@
 package com.vertex.mobilemouse;
 
+import android.content.Context;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
-import android.hardware.SensorListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
+import android.widget.Button;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
@@ -14,16 +16,16 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import java.io.OutputStream;
+import java.net.Socket;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
-    private SensorManager sensorMan;
+    private SensorManager sensorManager;
     private Sensor accelerometer;
-    private float[] mGravity;
-    private float mAccel;
-    private float mAccelCurrent;
-    private float mAccelLast;
-    public float x= 0.00F, y= 0.00F, z= 0.00F;
+    private Socket socket;
+    private OutputStream outputStream;
+    private float[] acceleration = new float[3];
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,50 +38,66 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             return insets;
         });
 
-        sensorMan = (SensorManager)getSystemService(SENSOR_SERVICE);
-        accelerometer = sensorMan.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-        mAccel = 0.00f;
-        mAccelCurrent = SensorManager.GRAVITY_EARTH;
-        mAccelLast = SensorManager.GRAVITY_EARTH;
+        Button leftClickButton = findViewById(R.id.leftClickButton);
+        Button rightClickButton = findViewById(R.id.rightClickButton);
+
+        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+
+        new Thread(() -> {
+            try {
+                socket = new Socket("10.90.0.1", 8888);
+                outputStream = socket.getOutputStream();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
+
+        leftClickButton.setOnClickListener(v -> sendCommand("LEFTCLICK--"));
+        rightClickButton.setOnClickListener(v -> sendCommand("RIGHTCLICK--"));
 
     }
 
+
     @Override
-    public void onResume() {
+    protected void onResume() {
         super.onResume();
-        sensorMan.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI);
+        sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        sensorMan.unregisterListener(this);
+        sensorManager.unregisterListener(this);
     }
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER){
-            mGravity = event.values.clone();
-            // Shake detection
-            Log.d("XYZ", "onSensorChanged: X= "+ Float.toString(x - mGravity[0]) + ", Y= "+ Float.toString(y - mGravity[1]) + ", Z= "+Float.toString(z - mGravity[2])+"\n");
-            x = mGravity[0];
-            y = mGravity[1];
-            z = mGravity[2];
-            mAccelLast = mAccelCurrent;
-            mAccelCurrent = (float)Math.sqrt(x*x + y*y + z*z);
-            float delta = mAccelCurrent - mAccelLast;
-            mAccel = mAccel * 0.9f + delta;
-            // Make this higher or lower according to how much
-            // motion you want to detect
-            if(mAccel > 3){
-                // do something
-            }
-        }
+        if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
 
+            if (Math.abs(event.values[0] - acceleration[0]) > 0.2 || Math.abs(event.values[1] - acceleration[1]) > 0.2){
+                acceleration[0] = event.values[0];
+                acceleration[1] = event.values[1];
+                acceleration[2] = event.values[2];
+                sendCommand("MOVE_" + acceleration[0] + "_" + acceleration[1] + "--");
+                Log.d("XYZ", "XYZ : " + acceleration[0] + " " + acceleration[1]);
+            }
+
+        }
     }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
-        // required method
+    }
+
+    private void sendCommand(String command) {
+        new Thread(() -> {
+            try {
+                outputStream.write(command.getBytes());
+                outputStream.flush();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
     }
 }
