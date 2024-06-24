@@ -19,7 +19,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     private SensorManager sensorMan;
     private Sensor accelerometer;
-
     private float[] mGravity;
     private float mAccel;
     private float mAccelCurrent;
